@@ -2,50 +2,78 @@ import json
 import random
 import threading
 import time
-
 import requests
-from requests_jwt import JWTAuth
+import datetime
+import pytz
 
 apiAddress = "https://bikesharing-261122.appspot.com"
+zonePoints = {
+    "5e8b17a68ffd1f13d88234d5" : [32.7840346, 39.907613],
+    "5e9dbe5f1c9d44000063fbe3" : [32.7833453, 39.8926391],
+    "5e9dbe901c9d44000063fbe4" : [32.793425, 39.891464],
+    "5e9dbf191c9d44000063fbe5" : [32.77587, 39.8975965],
+    "5eb15e0675a718000a67e8e8" : [32.7775329, 39.8867738],
+    "5eb15f2175a718000a67e8e9" : [32.7896351, 39.8894925],
+    "5eb15fe475a718000a67e8ea" : [32.7816823, 39.9004917],
+    "5eb160c875a718000a67e8eb" : [32.7831441, 39.8968742]
+}
 
-#r = requests.post("http://35.189.94.121/auth/local", data={"identifier":"cago","password":"cagdas"})
+def usage_thread(username, userId, bikeId, lastZoneId):
 
-#print(r.json()["jwt"])
+    # User logs in and retrieves jwt token
+    time.sleep(random.randint(5, 60))
+    header = login(username)
 
-def usage_thread(username, user_id):
-    response = requests.post(apiAddress+"/auth/local",
+    # User starts a session
+    time.sleep(random.randint(5,60))
+    status = start_session(header, userId, bikeId, lastZoneId)
+    # User loads money until starting a session
+    while status != 200:
+        # User loads money on its account
+        time.sleep(random.randint(5, 60))
+        load_money(header, userId, random.randint(5, 25))
+        # User starts a session
+        time.sleep(random.randint(5, 60))
+        status = start_session(header, userId, bikeId, lastZoneId)
+
+    # Usage time
+    time.sleep(random.randint(5*60, 75*60))
+
+    # User ends the session
+    end_session(header, userId)
+
+def login(username):
+    response = requests.post(apiAddress + "/auth/local",
                              data={"identifier": username, "password": "cagdas"})
+    print("==>", username, response.json())
     jwt = response.json()["jwt"]
-
-
-    time.sleep(random.randint(1,5))
-    print(username, "sending add money req")
     header = {'Authorization': 'Bearer ' + jwt}
-    payload = {"userId": user_id, "amount": random.randint(20,25)}
-    print(payload)
-    response = requests.post(apiAddress+"/transactions/addMoney",
+    return header
+
+def load_money(header, userId, amount):
+    print(userId, "sending add money req")
+    response = requests.post(apiAddress + "/transactions/addMoney",
                              headers=header,
-                             json=payload)
-    print("for user:", username ,response.json())
+                             json={"userId": userId, "amount": amount})
+    print("for user:", userId, response.json())
 
-
-    time.sleep(random.randint(1,5))
-    print(username, "sending start session req")
+def start_session(header, userId, bikeId, lastZoneId):
+    print(userId, "sending start session req")
     response = requests.post(apiAddress + "/usages/startSession",
                              headers=header,
-                             json={"bikeId": "5eb173ecfc13ae681e000011",
-                                   "userId": user_id,
-                                   "lastZoneId": "5e8b17a68ffd1f13d88234d5",
-                                   "location": [32.7840346, 39.907613]})
-    print("for user:", username ,response.json())
+                             json={"bikeId": bikeId,
+                                   "userId": userId,
+                                   "lastZoneId": lastZoneId,
+                                   "location": zonePoints[lastZoneId]})
+    print("for user:", userId, response.json())
+    return response.json()["status"]
 
-
-    time.sleep(random.randint(1, 5))
-    print(username, "sending end session req")
+def end_session(header, userId):
+    print(userId, "sending end session req")
     response = requests.post(apiAddress + "/usages/endSession",
                              headers=header,
-                             json={"userId": user_id, "location": [32.7840346, 39.907613]})
-    print("for user:", username, response.json())
+                             json={"userId": userId, "location": list(zonePoints.values())[random.randint(0, 7)]})
+    print("for user:", userId, response.json())
 
 def get_users_from_db(number_of_active_users):
     users_file = open("users","r")
@@ -70,19 +98,58 @@ def get_bikes_from_db(number_of_active_users):
     return random.choices(bikes, k=number_of_active_users)
 
 def main():
-    #date = datetime.datetime.now(pytz.timezone('Asia/Istanbul'))
-    #print(date.hour)
-    number_of_active_users = 1
-    users = get_users_from_db(number_of_active_users)
-    bikes = get_bikes_from_db(number_of_active_users)
-    print("chosen users:", users)
-    print("chosen bikes:", bikes)
 
-    for username, user_id in users:
-        usage_thread_conf = threading.Thread(target=usage_thread(username, user_id))
-        usage_thread_conf.start()
+    for i in range(50):
+        date = datetime.datetime.now(pytz.timezone('Asia/Istanbul'))
 
+        if 0 < date.hour < 1:
+            number_of_active_users = 20
+        elif 1 < date.hour < 2:
+            number_of_active_users = 15
+        elif 2 < date.hour < 7:
+            number_of_active_users = 5
+        elif 7 < date.hour < 8:
+            number_of_active_users = 30
+        elif 8 < date.hour < 9:
+            number_of_active_users = 50
+        elif 9 < date.hour < 11:
+            number_of_active_users = 30
+        elif 11 < date.hour < 13:
+            number_of_active_users = 60
+        elif 13 < date.hour < 16:
+            number_of_active_users = 30
+        elif 16 < date.hour < 19:
+            number_of_active_users = 40
+        elif 19 < date.hour < 23:
+            number_of_active_users = 25
+        else :
+            number_of_active_users = 15
 
+        users = get_users_from_db(number_of_active_users)
+        bikes = get_bikes_from_db(number_of_active_users)
+
+        print("chosen active users:", users)
+        print("chosen active bikes:", bikes)
+
+        threads = []
+        for i in range(len(users)):
+            usage_thread_conf = threading.Thread(
+                target=usage_thread,
+                args=(users[i][0], users[i][1], bikes[i][0], bikes[i][1]))
+            threads.append(usage_thread_conf)
+
+        print("threads starting")
+
+        for t in range(len(threads)):
+            print(t, "started")
+            threads[t].start()
+            if t%10 == 9:
+                time.sleep(60)
+
+        print("threads started")
+
+        for t in threads:
+            t.join()
 
 if __name__ == '__main__':
     main()
