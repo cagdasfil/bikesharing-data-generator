@@ -18,29 +18,31 @@ zonePoints = {
     "5eb160c875a718000a67e8eb" : [32.7831441, 39.8968742]
 }
 
-def usage_thread(username, userId, bikeId, lastZoneId):
+def usage_thread(username, userId, bikeId, startZoneId, endZoneId):
 
     # User logs in and retrieves jwt token
-    time.sleep(random.randint(5, 60))
+    time.sleep(random.randint(5, 120))
     header = login(username)
 
     # User starts a session
-    time.sleep(random.randint(5,60))
-    status = start_session(header, userId, bikeId, lastZoneId)
+    time.sleep(random.randint(60,30*60))
+    status = start_session(header, userId, bikeId, startZoneId)
     # User loads money until starting a session
-    while status != 200:
+    i=0
+    while status!=200 and i<2:
         # User loads money on its account
         time.sleep(random.randint(5, 60))
         load_money(header, userId, random.randint(5, 25))
         # User starts a session
         time.sleep(random.randint(5, 60))
-        status = start_session(header, userId, bikeId, lastZoneId)
+        status = start_session(header, userId, bikeId, startZoneId)
+        i+=1
 
     # Usage time
     time.sleep(random.randint(5*60, 75*60))
 
     # User ends the session
-    end_session(header, userId)
+    end_session(header, userId, endZoneId)
 
 def login(username):
     response = requests.post(apiAddress + "/auth/local",
@@ -68,11 +70,11 @@ def start_session(header, userId, bikeId, lastZoneId):
     print("for user:", userId, response.json())
     return response.json()["status"]
 
-def end_session(header, userId):
+def end_session(header, userId, endZoneId):
     print(userId, "sending end session req")
     response = requests.post(apiAddress + "/usages/endSession",
                              headers=header,
-                             json={"userId": userId, "location": list(zonePoints.values())[random.randint(0, 7)]})
+                             json={"userId": userId, "location": zonePoints[endZoneId]})
     print("for user:", userId, response.json())
 
 def get_users_from_db(number_of_active_users):
@@ -95,7 +97,7 @@ def get_bikes_from_db(number_of_active_users):
         bike_line = bikes_file.readline()
     print(len(bikes))
     bikes_file.close()
-    return random.choices(bikes, k=number_of_active_users)
+    return random.choices(bikes, k=(number_of_active_users*2))
 
 def main():
 
@@ -135,7 +137,7 @@ def main():
         for i in range(len(users)):
             usage_thread_conf = threading.Thread(
                 target=usage_thread,
-                args=(users[i][0], users[i][1], bikes[i][0], bikes[i][1]))
+                args=(users[i][0], users[i][1], bikes[i][0], bikes[i][1], bikes[i+number_of_active_users][1]))
             threads.append(usage_thread_conf)
 
         print("threads starting")
